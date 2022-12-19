@@ -83,7 +83,7 @@ mod test {
         );
         correct.insert(
             hex!("84d81cb70dfc52a964e3c6f38d753533e134a9e8").to_vec(),
-            "test/odyssey.mb.txt".to_string(),
+            "test/odyssey2.txt".to_string(),
         );
         correct.insert(
             hex!("b444ac06613fc8d63795be9ad0beaf55011936ac").to_vec(),
