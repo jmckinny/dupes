@@ -4,14 +4,14 @@ use std::{
     io::{BufReader, Read},
     path::Path,
     sync::{Arc, RwLock},
-    thread::JoinHandle,
 };
+use threadpool::ThreadPool;
 type SeenFiles = Arc<RwLock<HashMap<Vec<u8>, String>>>;
 
 fn main() -> std::io::Result<()> {
     let mut args = std::env::args();
     let dir = args.nth(1).unwrap_or_else(|| String::from("."));
-    let mut tasks = Vec::new();
+    let mut tasks = ThreadPool::new(8);
     scan_directory(
         Path::new(&dir),
         &Arc::new(RwLock::new(HashMap::new())),
@@ -19,39 +19,31 @@ fn main() -> std::io::Result<()> {
     )?;
 
     // Wait for all computation to be done
-    for task in tasks {
-        task.join().unwrap();
-    }
+    tasks.join();
 
     Ok(())
 }
 
-fn scan_directory(
-    path: &Path,
-    seen: &SeenFiles,
-    tasks: &mut Vec<JoinHandle<()>>,
-) -> std::io::Result<()> {
+fn scan_directory(path: &Path, seen: &SeenFiles, pool: &ThreadPool) -> std::io::Result<()> {
     if path.is_dir() {
         for entry in std::fs::read_dir(path)? {
             let entry = entry?;
             let path = entry.path();
             if !path.is_dir() {
                 let copy = seen.clone();
-                let handle = std::thread::spawn(move || {
+                pool.execute(move || {
                     handle_file(path.as_path(), &copy);
                 });
-                tasks.push(handle);
             } else {
-                scan_directory(&entry.path(), seen, tasks)?;
+                scan_directory(&entry.path(), seen, pool)?;
             }
         }
     } else {
         let copy = seen.clone();
         let path_copy = path.to_owned();
-        let handle = std::thread::spawn(move || {
+        pool.execute(move || {
             handle_file(&path_copy, &copy);
         });
-        tasks.push(handle);
     }
     Ok(())
 }
@@ -113,8 +105,8 @@ mod test {
     #[test]
     fn test_dupes() {
         let hashes = Arc::new(RwLock::new(HashMap::new()));
-        let mut tasks = Vec::new();
-        scan_directory(Path::new("test"), &hashes, &mut tasks).unwrap();
+        let pool = ThreadPool::new(4);
+        scan_directory(Path::new("test"), &hashes, &pool).unwrap();
         let mut correct = HashMap::new();
         correct.insert(
             hex!("2aae6c35c94fcfb415dbe95f408b9ce91ee846ed").to_vec(),
@@ -129,9 +121,7 @@ mod test {
             "test/test1.txt".to_string(),
         );
 
-        for task in tasks {
-            task.join().unwrap();
-        }
+        pool.join();
         for (hash, _) in correct {
             assert!(hashes.read().unwrap().get(&hash).is_some());
         }
