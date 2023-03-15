@@ -1,7 +1,8 @@
 # dupes
 Basic duplicate file finder via sha1 hashing
-## Feature
+## Features
 - Recursive directory search for duplicate files
+- Multithreaded via a threadpool
 ## Example Output
 ```
 $ dupes <directory>
